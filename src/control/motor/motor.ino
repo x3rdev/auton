@@ -14,7 +14,7 @@ const int servoPin = 4;
 Servo steeringServo;
 
 void setup() {
-
+  Serial.begin(115200);
   pinMode(ledPin, OUTPUT);
   digitalWrite(ledPin, HIGH);   
 
@@ -22,7 +22,17 @@ void setup() {
   steeringServo.attach(servoPin, 500, 2500); 
 
   WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    digitalWrite(ledPin, HIGH);
+    delay(200);
+    digitalWrite(ledPin, LOW);
+    delay(200);
+  }
+
+  Serial.println("IP:");
+  Serial.println(WiFi.localIP());
   udp.begin(localPort);
+  
 }
 
 void loop() {
