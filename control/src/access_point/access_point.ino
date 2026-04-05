@@ -7,7 +7,7 @@ const char* password = "123456789";
 
 void setup() {
   Serial.begin(115200);
-
+  
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);  // start OFF
 
@@ -19,7 +19,7 @@ void setup() {
 }
 
 void loop() {
-  int clients = WiFi.softAPgetStationNum();
+  int clients = WiFi.softAPgetStationNum();             
 
   if (clients > 0) {
     digitalWrite(LED_PIN, HIGH);  // LED ON
