@@ -1,0 +1,8 @@
+{
+  "label": "PlatformIO Build",
+  "type": "shell",
+  "command": "platformio run",
+  "options": {
+    "cwd": "${workspaceFolder}/control"
+  }
+}
