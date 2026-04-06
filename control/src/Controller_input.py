@@ -100,7 +100,7 @@ while True:
     throttle_byte = int((throttle + 1) / 2 * 255)
     steer_byte    = max(-100, min(100, int(steer * 100)))
 
-    packet = struct.pack("Bb", throttle_byte, steer_byte)
+    packet = struct.pack("Bb", throttle_byte, -steer_byte)
     sock.sendto(packet, target)
 
     # --- Terminal print (every 10 frames = ~6x per second) ---

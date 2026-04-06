@@ -1,6 +1,7 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <math.h>
+#include <ESP32Servo.h>
 
 // --- WIFI SETUP ---
 const char* ssid = "auton";
@@ -9,27 +10,40 @@ const char* password = "12345678";
 WiFiUDP udp;
 const int port = 4210;
 
-uint8_t buffer[2];  // exactly 2 bytes
+uint8_t buffer[2];
 
 // --- LED SETUP ---
 const int LED_PIN = 8;
 unsigned long lastBlink = 0;
 bool ledState = false;
 
-// --- MOTOR PINS (ESP32-C3 SUPER MINI) ---
+// --- MOTOR PINS ---
 const int IN1 = 3;
 const int IN2 = 4;
 const int ENA = 5;
 
-// --- PWM SETUP ---
-const int PWM_CHANNEL = 0;
-const int PWM_FREQ = 1000;
-const int PWM_RES = 8; // 0–255
+// --- PWM (MOTOR) ---
+const int PWM_CHANNEL_MOTOR = 2;   // use different channel
+const int PWM_FREQ_MOTOR = 1000;
+const int PWM_RES_MOTOR = 8;
+
+// --- SERVO ---
+Servo steeringServo;
+const int SERVO_PIN = 7;
+
+// --- SERVO FUNCTION ---
+void setServo(float steer) {
+  if (steer > 1) steer = 1;
+  if (steer < -1) steer = -1;
+
+  int angle = (int)((steer + 1.0) * 90.0);  // -1→1 → 0→180
+  steeringServo.write(angle);
+}
 
 void setup() {
   Serial.begin(115200);
 
-  // Start Access Point
+  // --- WIFI AP ---
   WiFi.softAP(ssid, password);
 
   delay(1000);
@@ -39,31 +53,48 @@ void setup() {
   udp.begin(port);
   Serial.println("UDP listening...");
 
-  // LED setup (inverted)
+  // --- LED ---
   pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, HIGH);  // OFF
+  digitalWrite(LED_PIN, HIGH);
 
-  // MOTOR setup
+  // --- MOTOR ---
   pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
 
-  ledcSetup(PWM_CHANNEL, PWM_FREQ, PWM_RES);
-  ledcAttachPin(ENA, PWM_CHANNEL);
+  // 🔥 Allocate timers (prevents conflicts)
+  ESP32PWM::allocateTimer(0); // motor
+  ESP32PWM::allocateTimer(1); // servo
+
+  ledcSetup(PWM_CHANNEL_MOTOR, PWM_FREQ_MOTOR, PWM_RES_MOTOR);
+  ledcAttachPin(ENA, PWM_CHANNEL_MOTOR);
+
+  // --- SERVO ---
+  steeringServo.setPeriodHertz(50);
+  steeringServo.attach(SERVO_PIN, 500, 2500);
+
+  // Center servo
+  setServo(0);
+
+  // --- TEST SWEEP (remove later if you want) ---
+  delay(500);
+  steeringServo.write(0);
+  delay(800);
+  steeringServo.write(180);
+  delay(800);
+  steeringServo.write(90);
 }
 
 void loop() {
-  // --- CLIENT CHECK ---
+  // --- CLIENT STATUS LED ---
   int clients = WiFi.softAPgetStationNum();
 
   if (clients == 0) {
-    // Blink when no clients
     if (millis() - lastBlink > 500) {
       lastBlink = millis();
       ledState = !ledState;
       digitalWrite(LED_PIN, ledState ? LOW : HIGH);
     }
   } else {
-    // Solid ON when connected
     digitalWrite(LED_PIN, LOW);
   }
 
@@ -83,38 +114,30 @@ void loop() {
     float deadzone = 0.05;
 
     if (fabs(throttle) < deadzone) {
-      // STOP
       digitalWrite(IN1, LOW);
       digitalWrite(IN2, LOW);
-      ledcWrite(PWM_CHANNEL, 0);
+      ledcWrite(PWM_CHANNEL_MOTOR, 0);
     }
     else if (throttle > 0) {
-      // FORWARD
       digitalWrite(IN1, HIGH);
       digitalWrite(IN2, LOW);
-
-      int speed = (int)(throttle * 255);
-      ledcWrite(PWM_CHANNEL, speed);
+      ledcWrite(PWM_CHANNEL_MOTOR, (int)(throttle * 255));
     }
     else {
-      // REVERSE
       digitalWrite(IN1, LOW);
       digitalWrite(IN2, HIGH);
-
-      int speed = (int)(-throttle * 255);
-      ledcWrite(PWM_CHANNEL, speed);
+      ledcWrite(PWM_CHANNEL_MOTOR, (int)(-throttle * 255));
     }
 
-    // --- DEBUG PRINT ---
-    Serial.print("RAW: ");
-    Serial.print(throttle_byte);
-    Serial.print(" , ");
-    Serial.print(steer_byte);
+    // --- SERVO CONTROL ---
+    setServo(steer);
 
-    Serial.print(" | Throttle: ");
-    Serial.print(throttle, 3);
-
-    Serial.print(" | Speed PWM: ");
-    Serial.println((int)(fabs(throttle) * 255));
+    // --- DEBUG ---
+    Serial.print("Throttle: ");
+    Serial.print(throttle, 2);
+    Serial.print(" | PWM: ");
+    Serial.print((int)(fabs(throttle) * 255));
+    Serial.print(" | Steer: ");
+    Serial.println(steer, 2);
   }
 }
