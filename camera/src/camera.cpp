@@ -3,7 +3,7 @@
 const char* ssid = "auton";
 const char* password = "12345678";
 
-const char* host = "192.168.4.2"; // PC IP
+const char* host = "192.168.4.4"; // PC IP
 const int port = 9000;
 
 WiFiClient client;
@@ -30,10 +30,10 @@ camera_config_t camera_config = {
     .ledc_timer = LEDC_TIMER_0,
     .ledc_channel = LEDC_CHANNEL_0,
     .pixel_format = PIXFORMAT_JPEG,
-    .frame_size = FRAMESIZE_240X240,
+    .frame_size = FRAMESIZE_SVGA,
     .jpeg_quality = 12,
     .fb_count = 1,
-    .grab_mode = CAMERA_GRAB_WHEN_EMPTY
+    .grab_mode = CAMERA_GRAB_LATEST 
 };
 
 void setup() {
@@ -57,10 +57,7 @@ void setup() {
     Serial.print("Connected, IP: ");
     Serial.println(WiFi.localIP());
 
-    if (!client.connect(host, port)) {
-        Serial.println("TCP connection failed");
-        while(true);
-    }
+    client.connect(host, port);
     Serial.println("TCP connection OK");
 }
 
@@ -74,7 +71,7 @@ void loop() {
     }
 
     camera_capture(client);
-    delay(1000 / 60); // sixty times a second
+    delay(1000 / 24); 
 }
 
 // Capture a frame and send over TCP
