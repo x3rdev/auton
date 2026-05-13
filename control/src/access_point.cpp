@@ -23,7 +23,7 @@ const int IN2 = 4;
 const int ENA = 5;
 
 // --- PWM (MOTOR) ---
-const int PWM_CHANNEL_MOTOR = 2;   // use different channel
+const int PWM_CHANNEL_MOTOR = 2;   
 const int PWM_FREQ_MOTOR = 1000;
 const int PWM_RES_MOTOR = 8;
 
@@ -61,7 +61,6 @@ void setup() {
   pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
 
-  // 🔥 Allocate timers (prevents conflicts)
   ESP32PWM::allocateTimer(0); // motor
   ESP32PWM::allocateTimer(1); // servo
 
