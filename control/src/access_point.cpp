@@ -50,8 +50,8 @@ void setup() {
   Serial.begin(115200);
 
   WiFi.softAP(ssid, password);
-
   delay(1000);
+  
   Serial.print("AP IP: ");
   Serial.println(WiFi.softAPIP());
 
