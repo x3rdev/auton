@@ -73,7 +73,10 @@ while running:
         right = 0
 
     packet = struct.pack("bb", left, right)
-    sock.sendto(packet, target)
+    sock.sendto(packet, target)  
+
+    print(f"Sent packet to {ESP_IP}:{ESP_PORT} | left={left:+4d}, right={right:+4d}")
+
 
     screen.fill((15, 15, 25))
 
