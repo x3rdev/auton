@@ -1,6 +1,5 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
-#include <math.h>
 
 // --- WIFI SETUP ---
 const char* ssid = "auton";
@@ -9,7 +8,7 @@ const char* password = "12345678";
 WiFiUDP udp;
 const int port = 4210;
 
-uint8_t buffer[2];
+int8_t buffer[2];
 
 // --- LED SETUP ---
 const int LED_PIN = 8;
@@ -24,12 +23,15 @@ const int LEFT_IN2 = 3;
 const int RIGHT_IN1 = 4;
 const int RIGHT_IN2 = 5;
 
-void setOneMotor(int in1, int in2, int dir) {
-  if (dir > 0) {
+unsigned long lastPacketTime = 0;
+const unsigned long FAILSAFE_TIMEOUT = 500;
+
+void setOneMotor(int in1, int in2, int command) {
+  if (command > 0) {
     digitalWrite(in1, HIGH);
     digitalWrite(in2, LOW);
   } 
-  else if (dir < 0) {
+  else if (command < 0) {
     digitalWrite(in1, LOW);
     digitalWrite(in2, HIGH);
   } 
@@ -39,55 +41,9 @@ void setOneMotor(int in1, int in2, int dir) {
   }
 }
 
-void setDrive(float throttle, float steer) {
-  throttle = constrain(throttle, -1.0, 1.0);
-  steer = constrain(steer, -1.0, 1.0);
-
-  float deadzone = 0.15;
-
-  if (fabs(throttle) < deadzone && fabs(steer) < deadzone) {
-    setOneMotor(LEFT_IN1, LEFT_IN2, 0);
-    setOneMotor(RIGHT_IN1, RIGHT_IN2, 0);
-    return;
-  }
-
-  int leftDir = 0;
-  int rightDir = 0;
-
-  if (fabs(throttle) >= deadzone) {
-    if (throttle > 0) {
-      leftDir = 1;
-      rightDir = 1;
-    } else {
-      leftDir = -1;
-      rightDir = -1;
-    }
-
-    if (steer > deadzone) {
-      rightDir = 0;
-    } 
-    else if (steer < -deadzone) {
-      leftDir = 0;
-    }
-  } 
-  else {
-    if (steer > deadzone) {
-      leftDir = 1;
-      rightDir = -1;
-    } 
-    else if (steer < -deadzone) {
-      leftDir = -1;
-      rightDir = 1;
-    }
-  }
-
-  setOneMotor(LEFT_IN1, LEFT_IN2, leftDir);
-  setOneMotor(RIGHT_IN1, RIGHT_IN2, rightDir);
-
-  Serial.print("Left Dir: ");
-  Serial.print(leftDir);
-  Serial.print(" | Right Dir: ");
-  Serial.println(rightDir);
+void stopMotors() {
+  setOneMotor(LEFT_IN1, LEFT_IN2, 0);
+  setOneMotor(RIGHT_IN1, RIGHT_IN2, 0);
 }
 
 void setup() {
@@ -110,8 +66,7 @@ void setup() {
   pinMode(RIGHT_IN1, OUTPUT);
   pinMode(RIGHT_IN2, OUTPUT);
 
-  setOneMotor(LEFT_IN1, LEFT_IN2, 0);
-  setOneMotor(RIGHT_IN1, RIGHT_IN2, 0);
+  stopMotors();
 }
 
 void loop() {
@@ -130,19 +85,26 @@ void loop() {
   int packetSize = udp.parsePacket();
 
   if (packetSize == 2) {
-    udp.read(buffer, 2);
+    udp.read((uint8_t*)buffer, 2);
 
-    uint8_t throttle_byte = buffer[0];
-    int8_t steer_byte = buffer[1];
+    int8_t leftCommand = buffer[0];
+    int8_t rightCommand = buffer[1];
 
-    float throttle = ((float)throttle_byte / 255.0) * 2.0 - 1.0;
-    float steer = steer_byte / 100.0;
+    if (abs(leftCommand) < 15) leftCommand = 0;
+    if (abs(rightCommand) < 15) rightCommand = 0;
 
-    setDrive(throttle, steer);
+    setOneMotor(LEFT_IN1, LEFT_IN2, leftCommand);
+    setOneMotor(RIGHT_IN1, RIGHT_IN2, rightCommand);
 
-    Serial.print("Throttle: ");
-    Serial.print(throttle, 2);
-    Serial.print(" | Steer: ");
-    Serial.println(steer, 2);
+    lastPacketTime = millis();
+
+    Serial.print("Left: ");
+    Serial.print(leftCommand);
+    Serial.print(" | Right: ");
+    Serial.println(rightCommand);
+  }
+
+  if (millis() - lastPacketTime > FAILSAFE_TIMEOUT) {
+    stopMotors();
   }
 }
