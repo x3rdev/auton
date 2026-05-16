@@ -1,7 +1,6 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <math.h>
-#include <ESP32Servo.h>
 
 // --- WIFI SETUP ---
 const char* ssid = "auton";
@@ -17,33 +16,83 @@ const int LED_PIN = 8;
 unsigned long lastBlink = 0;
 bool ledState = false;
 
-// --- MOTOR PINS ---
-const int IN1 = 3;
-const int IN2 = 4;
-const int ENA = 5;
+// --- LEFT MOTOR PINS ---
+const int LEFT_IN1 = 2;
+const int LEFT_IN2 = 3;
 
-// --- PWM (MOTOR) ---
-const int PWM_CHANNEL_MOTOR = 2;   
-const int PWM_FREQ_MOTOR = 1000;
-const int PWM_RES_MOTOR = 8;
+// --- RIGHT MOTOR PINS ---
+const int RIGHT_IN1 = 4;
+const int RIGHT_IN2 = 5;
 
-// --- SERVO ---
-Servo steeringServo;
-const int SERVO_PIN = 7;
+void setOneMotor(int in1, int in2, int dir) {
+  if (dir > 0) {
+    digitalWrite(in1, HIGH);
+    digitalWrite(in2, LOW);
+  } 
+  else if (dir < 0) {
+    digitalWrite(in1, LOW);
+    digitalWrite(in2, HIGH);
+  } 
+  else {
+    digitalWrite(in1, LOW);
+    digitalWrite(in2, LOW);
+  }
+}
 
-// --- SERVO FUNCTION ---
-void setServo(float steer) {
-  if (steer > 1) steer = 1;
-  if (steer < -1) steer = -1;
+void setDrive(float throttle, float steer) {
+  throttle = constrain(throttle, -1.0, 1.0);
+  steer = constrain(steer, -1.0, 1.0);
 
-  int angle = (int)((steer + 1.0) * 90.0);  // -1→1 → 0→180
-  steeringServo.write(angle);
+  float deadzone = 0.15;
+
+  if (fabs(throttle) < deadzone && fabs(steer) < deadzone) {
+    setOneMotor(LEFT_IN1, LEFT_IN2, 0);
+    setOneMotor(RIGHT_IN1, RIGHT_IN2, 0);
+    return;
+  }
+
+  int leftDir = 0;
+  int rightDir = 0;
+
+  if (fabs(throttle) >= deadzone) {
+    if (throttle > 0) {
+      leftDir = 1;
+      rightDir = 1;
+    } else {
+      leftDir = -1;
+      rightDir = -1;
+    }
+
+    if (steer > deadzone) {
+      rightDir = 0;
+    } 
+    else if (steer < -deadzone) {
+      leftDir = 0;
+    }
+  } 
+  else {
+    if (steer > deadzone) {
+      leftDir = 1;
+      rightDir = -1;
+    } 
+    else if (steer < -deadzone) {
+      leftDir = -1;
+      rightDir = 1;
+    }
+  }
+
+  setOneMotor(LEFT_IN1, LEFT_IN2, leftDir);
+  setOneMotor(RIGHT_IN1, RIGHT_IN2, rightDir);
+
+  Serial.print("Left Dir: ");
+  Serial.print(leftDir);
+  Serial.print(" | Right Dir: ");
+  Serial.println(rightDir);
 }
 
 void setup() {
   Serial.begin(115200);
 
-  // --- WIFI AP ---
   WiFi.softAP(ssid, password);
 
   delay(1000);
@@ -53,38 +102,19 @@ void setup() {
   udp.begin(port);
   Serial.println("UDP listening...");
 
-  // --- LED ---
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, HIGH);
 
-  // --- MOTOR ---
-  pinMode(IN1, OUTPUT);
-  pinMode(IN2, OUTPUT);
+  pinMode(LEFT_IN1, OUTPUT);
+  pinMode(LEFT_IN2, OUTPUT);
+  pinMode(RIGHT_IN1, OUTPUT);
+  pinMode(RIGHT_IN2, OUTPUT);
 
-  ESP32PWM::allocateTimer(0); // motor
-  ESP32PWM::allocateTimer(1); // servo
-
-  ledcSetup(PWM_CHANNEL_MOTOR, PWM_FREQ_MOTOR, PWM_RES_MOTOR);
-  ledcAttachPin(ENA, PWM_CHANNEL_MOTOR);
-
-  // --- SERVO ---
-  steeringServo.setPeriodHertz(50);
-  steeringServo.attach(SERVO_PIN, 500, 2500);
-
-  // Center servo
-  setServo(0);
-
-  // --- TEST SWEEP (remove later if you want) ---
-  delay(500);
-  steeringServo.write(0);
-  delay(800);
-  steeringServo.write(180);
-  delay(800);
-  steeringServo.write(90);
+  setOneMotor(LEFT_IN1, LEFT_IN2, 0);
+  setOneMotor(RIGHT_IN1, RIGHT_IN2, 0);
 }
 
 void loop() {
-  // --- CLIENT STATUS LED ---
   int clients = WiFi.softAPgetStationNum();
 
   if (clients == 0) {
@@ -97,45 +127,21 @@ void loop() {
     digitalWrite(LED_PIN, LOW);
   }
 
-  // --- UDP RECEIVE ---
   int packetSize = udp.parsePacket();
 
   if (packetSize == 2) {
     udp.read(buffer, 2);
 
     uint8_t throttle_byte = buffer[0];
-    int8_t steer_byte     = buffer[1];
+    int8_t steer_byte = buffer[1];
 
     float throttle = ((float)throttle_byte / 255.0) * 2.0 - 1.0;
     float steer = steer_byte / 100.0;
 
-    // --- MOTOR CONTROL ---
-    float deadzone = 0.05;
+    setDrive(throttle, steer);
 
-    if (fabs(throttle) < deadzone) {
-      digitalWrite(IN1, LOW);
-      digitalWrite(IN2, LOW);
-      ledcWrite(PWM_CHANNEL_MOTOR, 0);
-    }
-    else if (throttle > 0) {
-      digitalWrite(IN1, HIGH);
-      digitalWrite(IN2, LOW);
-      ledcWrite(PWM_CHANNEL_MOTOR, (int)(throttle * 255));
-    }
-    else {
-      digitalWrite(IN1, LOW);
-      digitalWrite(IN2, HIGH);
-      ledcWrite(PWM_CHANNEL_MOTOR, (int)(-throttle * 255));
-    }
-
-    // --- SERVO CONTROL ---
-    setServo(steer);
-
-    // --- DEBUG ---
     Serial.print("Throttle: ");
     Serial.print(throttle, 2);
-    Serial.print(" | PWM: ");
-    Serial.print((int)(fabs(throttle) * 255));
     Serial.print(" | Steer: ");
     Serial.println(steer, 2);
   }
