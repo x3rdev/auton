@@ -3,6 +3,9 @@ import struct
 import cv2
 import numpy as np
 import time
+# import torch
+# print(torch.cuda.is_available())
+
 HOST = "0.0.0.0"
 PORT = 9000
 
